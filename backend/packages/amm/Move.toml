@@ -42,7 +42,8 @@ override = true
 deepbookamm = "0x0"
 
 [environments]
-devnet = "10355f06"
+devnet = "de6146d1"
+testnet = "4c78adac"
 
 # Named addresses will be accessible in Move as `@name`. They're also exported:
 # for example, `std = "0x1"` is exported by the Standard Library.
@@ -54,10 +55,4 @@ devnet = "10355f06"
 # Local = { local = "../path/to/dev-build" }
 
 [dev-addresses]
-
-[r.mvr]
-network = "mainnet"
-# The dev-addresses section allows overwriting named addresses for the `--test`
-# and `--dev` modes.
-# alice = "0xB0B"
 

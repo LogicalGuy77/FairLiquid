@@ -3,8 +3,6 @@
 
 module deepbookamm::smart_router;
 
-use std::vector;
-
 /// Routing decision for an order
 public struct RoutingDecision has copy, drop {
     mm_address: address,

@@ -4,7 +4,6 @@
 module deepbookamm::crisis_oracle;
 
 use sui::clock::{Self, Clock};
-use std::vector;
 
 #[test_only]
 use sui::tx_context;
@@ -127,7 +126,7 @@ public fun check_stabilization(
 }
 
 /// Check if liquidity has drained significantly (>40% drop)
-pub fun check_liquidity_drain(
+public fun check_liquidity_drain(
     previous_liquidity: u64,
     current_liquidity: u64,
 ): bool {

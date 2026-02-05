@@ -9,9 +9,8 @@
  */
 
 module deepbookamm::myersonian_scoring {
-    use sui::object::{Self, UID};
-    use sui::transfer;
-    use sui::tx_context::{Self, TxContext};
+    use sui::object::UID;
+    use sui::tx_context::TxContext;
 
     // ========================================================================
     // CONSTANTS
@@ -40,7 +39,7 @@ module deepbookamm::myersonian_scoring {
 
     /// Stores historical MM performance distribution
     /// Used to compute CDF, PDF for virtual value functions
-    struct PerformanceDistribution has store, drop {
+    public struct PerformanceDistribution has store, drop {
         mean_score: u64,
         std_dev: u64,
         min_score: u64,
@@ -50,7 +49,7 @@ module deepbookamm::myersonian_scoring {
 
     /// Pre-computed virtual value roots from off-chain data
     /// Avoids expensive CDF/PDF calculations on-chain
-    struct VirtualValueRoots has store, drop {
+    public struct VirtualValueRoots has store, drop {
         upper_root: u64, // Martyr minimum commitment (p_1)
         lower_root: u64, // Sovereign maximum score (p_2)
         no_trade_gap: u64, // Width of gap: p_1 - p_2
@@ -59,7 +58,7 @@ module deepbookamm::myersonian_scoring {
     }
 
     /// MM's virtual value decomposition at a given performance level
-    struct VirtualValueBreakdown has store, drop {
+    public struct VirtualValueBreakdown has store, drop {
         raw_score: u64,
         information_rent: u64,
         adverse_selection_penalty: u64,
@@ -67,7 +66,7 @@ module deepbookamm::myersonian_scoring {
     }
 
     /// Scoring contract that enforces Myersonian mechanisms
-    struct MyersianScoringEngine has key {
+    public struct MyersianScoringEngine has key {
         id: UID,
         distribution: PerformanceDistribution,
         virtual_roots: VirtualValueRoots,
@@ -271,13 +270,13 @@ module deepbookamm::myersonian_scoring {
             let vv = compute_virtual_value(current, engine);
             cumulative = cumulative + vv.virtual_value;
             current = current + 1; // Step size of 1%
-        }
+        };
 
         cumulative
     }
 
     /// Calculate marginal IC reward (derivative): dR/dσ = φ(σ)
-    pub fun calculate_marginal_ic_reward(
+    public(package) fun calculate_marginal_ic_reward(
         mm_score: u64,
         engine: &MyersianScoringEngine,
     ): u64 {
@@ -342,7 +341,7 @@ module deepbookamm::myersonian_scoring {
         claimed_score: u64,
         actual_score_verified: u64,
         engine: &MyersianScoringEngine,
-        max_slash_percentage_bps: u64, // 5000 = 50%
+        _max_slash_percentage_bps: u64, // 5000 = 50%
     ): u64 {
         let claimed_vv = compute_virtual_value(claimed_score, engine);
         let actual_vv = compute_virtual_value(actual_score_verified, engine);
@@ -368,7 +367,7 @@ module deepbookamm::myersonian_scoring {
     /// new_belief = λ * proof_outcome + (1 - λ) * prior_belief
     ///
     /// λ = 0.7 (PROOF_BELIEF_UPDATE_WEIGHT) in basis points
-    pub fun update_mm_credibility_from_proof(
+    public(package) fun update_mm_credibility_from_proof(
         prior_belief: u64,
         proof_outcome: u64,
         belief_weight_bps: u64, // 700 = 70%
@@ -415,14 +414,14 @@ module deepbookamm::myersonian_scoring {
     }
 
     /// Get distribution mean (for reference)
-    pub fun get_distribution_mean(
+    public(package) fun get_distribution_mean(
         engine: &MyersianScoringEngine,
     ): u64 {
         engine.distribution.mean_score
     }
 
     /// Get distribution std dev
-    pub fun get_distribution_std_dev(
+    public(package) fun get_distribution_std_dev(
         engine: &MyersianScoringEngine,
     ): u64 {
         engine.distribution.std_dev

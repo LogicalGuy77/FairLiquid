@@ -3,14 +3,12 @@
 
 module deepbookamm::moral_pool;
 
-use sui::object::{Self, UID, ID};
+use sui::object::ID;
 use sui::balance::{Self, Balance};
 use sui::coin::{Self, Coin};
 use sui::event;
 use sui::clock::{Self, Clock};
-use sui::tx_context::{Self, TxContext};
-use sui::transfer;
-use std::vector;
+use sui::tx_context::TxContext;
 use deep_token::deep::DEEP;
 
 // === Errors ===
@@ -211,7 +209,7 @@ public fun update_crisis_state<BaseAsset, QuoteAsset>(
     liquidity_remaining_bps: u64,
     avg_spread_bps: u64,
     clock: &Clock,
-) -> bool {
+): bool {
     let mut should_activate = false;
     let mut trigger_type = 0u64;
     
