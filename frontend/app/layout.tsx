@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LEX JUSTICIA — Market Crash Simulator",
+  title: "LEX JUSTICIA",
   description:
     "Interactive demo of Myersonian mechanism design for fair DeFi market-making. Simulate a market crash and see how LEX JUSTICIA maintains liquidity when traditional AMMs fail.",
 };

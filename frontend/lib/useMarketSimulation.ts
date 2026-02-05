@@ -106,7 +106,7 @@ const PHASE_TICKS = {
 
 const COMMENTARY: Record<SimPhase, string[]> = {
   IDLE: [
-    "Welcome to the LEX JUSTICIA Market Crash Simulator. Press Play to begin the demonstration. You'll witness how Myersonian mechanism design transforms market-making during a crisis.",
+    "Welcome to the LEX JUSTICIA. Press Play to begin the demonstration. You'll witness how Myersonian mechanism design transforms market-making during a crisis.",
   ],
   NORMAL: [
     "📊 Normal market conditions. All 8 market makers are actively providing liquidity. Spreads are tight at ~5 bps. Both Traditional AMM and LEX JUSTICIA pools look identical — the magic happens during stress.",
