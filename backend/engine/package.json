@@ -6,7 +6,8 @@
     "start": "node dist/index.js",
     "dev": "dotenv -e .env.local -- tsx src/index.ts",
     "build": "tsc",
-    "watch": "tsx watch src/index.ts"
+    "watch": "tsx watch src/index.ts",
+    "test": "tsx src/test.ts"
   },
   "devDependencies": {
     "@types/node": "^24.0.1",

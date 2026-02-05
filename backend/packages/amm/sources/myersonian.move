@@ -8,17 +8,10 @@
  * Solution: Pre-compute virtual value roots off-chain, store on-chain
  */
 
-module lex_justicia::myersonian_scoring {
+module deepbookamm::myersonian_scoring {
     use sui::object::{Self, UID};
     use sui::transfer;
     use sui::tx_context::{Self, TxContext};
-    use sui::clock::Clock;
-    use sui::vec_map::{Self, VecMap};
-    use sui::balance::{Self, Balance};
-    use sui::coin::{Self, Coin};
-
-    // Testnet token for demonstration
-    use lex_justicia::deep::DEEP;
 
     // ========================================================================
     // CONSTANTS
@@ -47,7 +40,7 @@ module lex_justicia::myersonian_scoring {
 
     /// Stores historical MM performance distribution
     /// Used to compute CDF, PDF for virtual value functions
-    struct PerformanceDistribution has store {
+    struct PerformanceDistribution has store, drop {
         mean_score: u64,
         std_dev: u64,
         min_score: u64,
@@ -57,7 +50,7 @@ module lex_justicia::myersonian_scoring {
 
     /// Pre-computed virtual value roots from off-chain data
     /// Avoids expensive CDF/PDF calculations on-chain
-    struct VirtualValueRoots has store {
+    struct VirtualValueRoots has store, drop {
         upper_root: u64, // Martyr minimum commitment (p_1)
         lower_root: u64, // Sovereign maximum score (p_2)
         no_trade_gap: u64, // Width of gap: p_1 - p_2
@@ -66,7 +59,7 @@ module lex_justicia::myersonian_scoring {
     }
 
     /// MM's virtual value decomposition at a given performance level
-    struct VirtualValueBreakdown has store {
+    struct VirtualValueBreakdown has store, drop {
         raw_score: u64,
         information_rent: u64,
         adverse_selection_penalty: u64,
@@ -439,9 +432,14 @@ module lex_justicia::myersonian_scoring {
     // TESTING / DEMONSTRATION
     // ========================================================================
 
-    #[test]
-    fun test_virtual_value_calculation() {
-        // Create test distribution (mean=90, std_dev=5)
+    #[test_only]
+    fun destroy_engine_for_testing(engine: MyersianScoringEngine) {
+        let MyersianScoringEngine { id, distribution: _, virtual_roots: _, last_update: _ } = engine;
+        object::delete(id);
+    }
+
+    #[test_only]
+    fun create_test_engine(ctx: &mut TxContext): MyersianScoringEngine {
         let dist = PerformanceDistribution {
             mean_score: 90,
             std_dev: 5,
@@ -449,7 +447,6 @@ module lex_justicia::myersonian_scoring {
             max_score: 100,
             sample_count: 1000,
         };
-
         let roots = VirtualValueRoots {
             upper_root: 95,
             lower_root: 85,
@@ -457,13 +454,18 @@ module lex_justicia::myersonian_scoring {
             computation_epoch: 1,
             is_valid: true,
         };
-
-        let engine = MyersianScoringEngine {
-            id: object::new(&mut tx_context::dummy()),
+        MyersianScoringEngine {
+            id: object::new(ctx),
             distribution: dist,
             virtual_roots: roots,
             last_update: 0,
-        };
+        }
+    }
+
+    #[test]
+    fun test_virtual_value_calculation() {
+        let mut ctx = tx_context::dummy();
+        let engine = create_test_engine(&mut ctx);
 
         // Test Martyr tier (above upper root)
         let martyr_tier = allocate_optimal_tier(96, &engine);
@@ -476,6 +478,173 @@ module lex_justicia::myersonian_scoring {
         // Test no-trade gap
         let gap_tier = allocate_optimal_tier(90, &engine);
         assert!(gap_tier == 255, 2); // Should be REJECTED
+
+        destroy_engine_for_testing(engine);
+    }
+
+    #[test]
+    fun test_is_in_no_trade_gap() {
+        let mut ctx = tx_context::dummy();
+        let engine = create_test_engine(&mut ctx);
+
+        assert!(is_in_no_trade_gap(90, &engine), 0);  // In gap (85 < 90 < 95)
+        assert!(!is_in_no_trade_gap(96, &engine), 1); // Above gap
+        assert!(!is_in_no_trade_gap(84, &engine), 2); // Below gap
+        assert!(!is_in_no_trade_gap(95, &engine), 3); // At upper root (not in gap)
+        assert!(!is_in_no_trade_gap(85, &engine), 4); // At lower root (not in gap)
+
+        destroy_engine_for_testing(engine);
+    }
+
+    #[test]
+    fun test_compute_virtual_value_basic() {
+        let mut ctx = tx_context::dummy();
+        let engine = create_test_engine(&mut ctx);
+
+        let vv = compute_virtual_value(90, &engine);
+        assert!(vv.raw_score == 90, 0);
+        // Virtual value should be positive for the mean score
+        assert!(vv.virtual_value > 0, 1);
+
+        destroy_engine_for_testing(engine);
+    }
+
+    #[test]
+    fun test_cumulative_ic_reward_monotonic() {
+        let mut ctx = tx_context::dummy();
+        let engine = create_test_engine(&mut ctx);
+
+        let reward_low = calculate_cumulative_ic_reward(80, &engine);
+        let reward_mid = calculate_cumulative_ic_reward(90, &engine);
+        let reward_high = calculate_cumulative_ic_reward(95, &engine);
+
+        // IC property: higher score → higher cumulative reward (monotonic)
+        assert!(reward_high >= reward_mid, 0);
+        assert!(reward_mid >= reward_low, 1);
+
+        destroy_engine_for_testing(engine);
+    }
+
+    #[test]
+    fun test_marginal_ic_reward() {
+        let mut ctx = tx_context::dummy();
+        let engine = create_test_engine(&mut ctx);
+
+        let marginal = calculate_marginal_ic_reward(90, &engine);
+        // Marginal reward = virtual value at that score, should be non-negative
+        assert!(marginal >= 0, 0);
+
+        destroy_engine_for_testing(engine);
+    }
+
+    #[test]
+    fun test_slashing_overclaimed() {
+        let mut ctx = tx_context::dummy();
+        let engine = create_test_engine(&mut ctx);
+
+        let slash = calculate_slashing_amount(95, 80, &engine, 5000);
+        // Overclaiming (95 vs actual 80) should result in positive slash
+        assert!(slash > 0, 0);
+
+        destroy_engine_for_testing(engine);
+    }
+
+    #[test]
+    fun test_slashing_honest_mm() {
+        let mut ctx = tx_context::dummy();
+        let engine = create_test_engine(&mut ctx);
+
+        let slash = calculate_slashing_amount(80, 90, &engine, 5000);
+        // Under-claiming or honest should result in zero slash
+        assert!(slash == 0, 0);
+
+        destroy_engine_for_testing(engine);
+    }
+
+    #[test]
+    fun test_slashing_equal_scores() {
+        let mut ctx = tx_context::dummy();
+        let engine = create_test_engine(&mut ctx);
+
+        let slash = calculate_slashing_amount(85, 85, &engine, 5000);
+        // Same score = no overclaim = no slash
+        assert!(slash == 0, 0);
+
+        destroy_engine_for_testing(engine);
+    }
+
+    #[test]
+    fun test_belief_update_positive_proof() {
+        // Positive proof should increase belief
+        let posterior = update_mm_credibility_from_proof(500, 1000, 700);
+        assert!(posterior > 500, 0);
+    }
+
+    #[test]
+    fun test_belief_update_negative_proof() {
+        // Failed proof should decrease belief
+        let posterior = update_mm_credibility_from_proof(500, 0, 700);
+        assert!(posterior < 500, 0);
+    }
+
+    #[test]
+    fun test_belief_update_weight() {
+        // With weight 700 (70%): result = 0.7 * 1000 + 0.3 * 500 = 700 + 150 = 850
+        let posterior = update_mm_credibility_from_proof(500, 1000, 700);
+        assert!(posterior == 850, 0);
+    }
+
+    #[test]
+    fun test_crisis_spread_positive() {
+        let spread = calculate_crisis_spread(
+            4_000_000, // base price
+            3000,      // 30% current vol (bps)
+            1500,      // 15% normal vol (bps)
+            700,       // 70% info advantage
+            500,       // 0.5 risk aversion (Martyr)
+        );
+        assert!(spread > 0, 0);
+    }
+
+    #[test]
+    fun test_crisis_spread_zero_normal_vol() {
+        // Should not panic with zero normal vol (uses default 100)
+        let spread = calculate_crisis_spread(
+            4_000_000, 3000, 0, 700, 500,
+        );
+        assert!(spread > 0, 0);
+    }
+
+    #[test]
+    fun test_no_trade_gap_width() {
+        let mut ctx = tx_context::dummy();
+        let engine = create_test_engine(&mut ctx);
+
+        let gap = get_no_trade_gap_width(&engine);
+        assert!(gap == 10, 0); // upper_root(95) - lower_root(85) = 10
+
+        destroy_engine_for_testing(engine);
+    }
+
+    #[test]
+    fun test_tier_allocation_boundary_values() {
+        let mut ctx = tx_context::dummy();
+        let engine = create_test_engine(&mut ctx);
+
+        // Exactly at upper root → MARTYR
+        assert!(allocate_optimal_tier(95, &engine) == 0, 0);
+        // Exactly at lower root → SOVEREIGN
+        assert!(allocate_optimal_tier(85, &engine) == 2, 1);
+        // One above lower root → REJECT (in gap)
+        assert!(allocate_optimal_tier(86, &engine) == 255, 2);
+        // One below upper root → REJECT (in gap)
+        assert!(allocate_optimal_tier(94, &engine) == 255, 3);
+        // Well above upper root → MARTYR
+        assert!(allocate_optimal_tier(100, &engine) == 0, 4);
+        // Well below lower root → SOVEREIGN
+        assert!(allocate_optimal_tier(75, &engine) == 2, 5);
+
+        destroy_engine_for_testing(engine);
     }
 }
 

@@ -212,8 +212,8 @@ public fun update_crisis_state<BaseAsset, QuoteAsset>(
     avg_spread_bps: u64,
     clock: &Clock,
 ) -> bool {
-    let should_activate = false;
-    let trigger_type = 0u64;
+    let mut should_activate = false;
+    let mut trigger_type = 0u64;
     
     // Detect crisis triggers:
     // 1. High volatility > 3000 bps (30%)
@@ -257,7 +257,7 @@ public fun update_crisis_state<BaseAsset, QuoteAsset>(
 /// Deactivate crisis mode after market stabilizes
 public fun deactivate_crisis<BaseAsset, QuoteAsset>(
     pool: &mut MoralPool<BaseAsset, QuoteAsset>,
-    clock: &Clock,
+    _clock: &Clock,
 ) {
     pool.crisis_state.active = false;
     pool.crisis_state.trigger_type = 0;
@@ -271,18 +271,18 @@ public fun verify_martyr_compliance<BaseAsset, QuoteAsset>(
     pool: &mut MoralPool<BaseAsset, QuoteAsset>,
     mm_address: address,
     zk_proof_bytes: vector<u8>,
-    public_inputs: vector<u64>,
+    _public_inputs: vector<u64>,
     clock: &Clock,
-    ctx: &mut TxContext
+    _ctx: &mut TxContext
 ) {
     // For MVP: Simple validation (real ZK verification in Phase 2)
     // Check if proof is not empty
     assert!(vector::length(&zk_proof_bytes) > 0, 0);
     
     // Find MM in martyr list
-    let i = 0;
+    let mut i = 0;
     let len = vector::length(&pool.martyr_mms);
-    let found = false;
+    let mut found = false;
     
     while (i < len) {
         let mm_info = vector::borrow_mut(&mut pool.martyr_mms, i);
@@ -318,8 +318,8 @@ public fun get_mm_tier<BaseAsset, QuoteAsset>(
     mm_address: address,
 ): u8 {
     // Check Martyr tier
-    let i = 0;
-    let len = vector::length(&pool.martyr_mms);
+    let mut i = 0;
+    let mut len = vector::length(&pool.martyr_mms);
     while (i < len) {
         let mm_info = vector::borrow(&pool.martyr_mms, i);
         if (mm_info.mm_address == mm_address) {

@@ -62,8 +62,8 @@ console.log("\n[TEST 4] Optimal Tier Allocation");
 console.log("-".repeat(80));
 
 const allocationTests = [
-  { score: 92, expected: "MARTYR" },
-  { score: 80, expected: "SOVEREIGN" },
+  { score: 96, expected: "MARTYR" },
+  { score: 77, expected: "SOVEREIGN" },
   { score: 87, expected: "REJECT" },
 ];
 

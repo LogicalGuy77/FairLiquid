@@ -383,38 +383,32 @@ export function calculateOptimalCrisisSpread(
   mmRiskAversion: number, // 0.5 (Martyr) to 2.0 (Sovereign)
   adverseSelectionParam: number = 0.05
 ): CrisisSpreadBreakdown {
+  const BASE_SPREAD_BPS = 10;
   if (normalVolatility === 0) normalVolatility = 0.01; // Avoid division by zero
 
   const volatilityMultiplier = currentVolatility / normalVolatility;
 
-  // Monopoly component: profit from information advantage
-  // Based on optimal auction formula from Section 4
-  const monopolyComponent =
-    2 *
-    Math.sqrt(currentVolatility) *
-    Math.sqrt(2 / Math.PI) *
-    Math.sqrt(Math.max(0, -Math.log(1 - mmInformationAdvantage + 0.001)));
+  // Monopoly component: informed MMs can afford tighter spreads
+  // Higher information advantage → tighter spread (inverse relationship)
+  // Higher risk aversion → wider spread (direct relationship)
+  // Based on Section 4 optimal auction spread decomposition
+  const monopolyComponent = BASE_SPREAD_BPS * volatilityMultiplier *
+    (1 / (1 + mmInformationAdvantage)) * mmRiskAversion;
 
-  // Adverse selection component: cost of uncertainty
-  // Higher when MM doesn't have information advantage
-  const adverseSelectionComponent =
-    volatilityMultiplier *
-    adverseSelectionParam *
-    (1 - mmInformationAdvantage) *
-    mmRiskAversion;
+  // Adverse selection component: cost of information asymmetry
+  // Scales with (1 - info_advantage) * risk_aversion * volatility
+  // Uninformed MMs face higher costs, proportional to their risk aversion
+  const adverseSelectionComponent = BASE_SPREAD_BPS * volatilityMultiplier *
+    adverseSelectionParam * (1 - mmInformationAdvantage) * mmRiskAversion * 100;
 
-  // Total spread in dollar terms
-  const totalSpreadDollars =
-    (monopolyComponent + adverseSelectionComponent) * Math.sqrt(basePrice);
-
-  // Convert to basis points
-  const totalSpreadBPS = (totalSpreadDollars / basePrice) * 10000;
+  // Total spread in basis points
+  const totalSpread = monopolyComponent + adverseSelectionComponent;
 
   return {
-    baseSpread: 10, // Assume 10 bps normal spread
-    monopolyComponent: (monopolyComponent * 10000) / basePrice,
-    adverseSelectionComponent: (adverseSelectionComponent * 10000) / basePrice,
-    totalSpread: totalSpreadBPS,
+    baseSpread: BASE_SPREAD_BPS,
+    monopolyComponent,
+    adverseSelectionComponent,
+    totalSpread,
     volatilityMultiplier,
   };
 }

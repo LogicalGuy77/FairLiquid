@@ -6,6 +6,9 @@ module deepbookamm::crisis_oracle;
 use sui::clock::{Self, Clock};
 use std::vector;
 
+#[test_only]
+use sui::tx_context;
+
 /// Crisis detection result
 public struct CrisisDetectionResult has copy, drop {
     is_crisis: bool,
@@ -123,20 +126,138 @@ public fun check_stabilization(
     current_spread_bps < 500
 }
 
-/// Check if liquidity has drained significantly
+/// Check if liquidity has drained significantly (>40% drop)
 pub fun check_liquidity_drain(
-    _previous_liquidity: u64,
-    _current_liquidity: u64,
+    previous_liquidity: u64,
+    current_liquidity: u64,
 ): bool {
-    // TODO: Check if liquidity dropped > 40%
-    false
+    if (previous_liquidity == 0) {
+        return false
+    };
+    let remaining_bps = (current_liquidity * 10000) / previous_liquidity;
+    remaining_bps < 6000 // Less than 60% remaining = significant drain
 }
 
-/// Measure average spread from order book
-pub fun measure_avg_spread<BaseAsset, QuoteAsset>(
-    _pool: &Pool<BaseAsset, QuoteAsset>,
-): u64 {
-    // TODO: Read bid-ask spread from pool's order book
-    // Return in basis points
-    0
+// ========================================================================
+// TESTS
+// ========================================================================
+
+#[test]
+fun test_calculate_volatility_price_increase() {
+    let vol = calculate_volatility(1000, 1300);
+    assert!(vol == 3000, 0); // 30% increase = 3000 bps
+}
+
+#[test]
+fun test_calculate_volatility_price_decrease() {
+    let vol = calculate_volatility(1000, 700);
+    assert!(vol == 3000, 0); // 30% decrease = 3000 bps
+}
+
+#[test]
+fun test_calculate_volatility_zero_previous() {
+    let vol = calculate_volatility(0, 1000);
+    assert!(vol == 0, 0); // Zero prev price returns 0
+}
+
+#[test]
+fun test_calculate_volatility_no_change() {
+    let vol = calculate_volatility(1000, 1000);
+    assert!(vol == 0, 0);
+}
+
+#[test]
+fun test_calculate_avg_spread_basic() {
+    let mut spreads = vector::empty<u64>();
+    vector::push_back(&mut spreads, 100);
+    vector::push_back(&mut spreads, 200);
+    vector::push_back(&mut spreads, 300);
+    let avg = calculate_avg_spread(spreads);
+    assert!(avg == 200, 0);
+}
+
+#[test]
+fun test_calculate_avg_spread_empty() {
+    let spreads = vector::empty<u64>();
+    let avg = calculate_avg_spread(spreads);
+    assert!(avg == 0, 0);
+}
+
+#[test]
+fun test_check_stabilization_stable() {
+    assert!(check_stabilization(1000, 8000, 300), 0);
+}
+
+#[test]
+fun test_check_stabilization_high_volatility() {
+    assert!(!check_stabilization(3000, 8000, 300), 0); // vol too high
+}
+
+#[test]
+fun test_check_stabilization_low_liquidity() {
+    assert!(!check_stabilization(1000, 5000, 300), 0); // liquidity too low
+}
+
+#[test]
+fun test_check_stabilization_wide_spread() {
+    assert!(!check_stabilization(1000, 8000, 600), 0); // spread too wide
+}
+
+#[test]
+fun test_check_liquidity_drain_significant() {
+    assert!(check_liquidity_drain(10000, 4000), 0); // 40% remaining
+}
+
+#[test]
+fun test_check_liquidity_drain_minor() {
+    assert!(!check_liquidity_drain(10000, 8000), 0); // 80% remaining
+}
+
+#[test]
+fun test_check_liquidity_drain_zero_prev() {
+    assert!(!check_liquidity_drain(0, 1000), 0); // zero prev → safe
+}
+
+#[test]
+fun test_detect_crisis_volatility_trigger() {
+    let mut ctx = tx_context::dummy();
+    let clock = clock::create_for_testing(&mut ctx);
+    // 40% price drop: 1000 → 600 = 4000 bps volatility (> 3000)
+    let result = detect_crisis(1000, 600, 10000, 10000, 50, &clock);
+    assert!(result.is_crisis == true, 0);
+    assert!(result.trigger_type == 1, 1); // Volatility trigger
+    clock.destroy_for_testing();
+}
+
+#[test]
+fun test_detect_crisis_liquidity_trigger() {
+    let mut ctx = tx_context::dummy();
+    let clock = clock::create_for_testing(&mut ctx);
+    // Liquidity drops from 10000 to 4000 = 4000 bps remaining (< 6000)
+    let result = detect_crisis(1000, 1000, 10000, 4000, 50, &clock);
+    assert!(result.is_crisis == true, 0);
+    assert!(result.trigger_type == 2, 1); // Liquidity trigger
+    clock.destroy_for_testing();
+}
+
+#[test]
+fun test_detect_crisis_spread_trigger() {
+    let mut ctx = tx_context::dummy();
+    let clock = clock::create_for_testing(&mut ctx);
+    // Spread > 1000 bps
+    let result = detect_crisis(1000, 1000, 10000, 10000, 1500, &clock);
+    assert!(result.is_crisis == true, 0);
+    assert!(result.trigger_type == 3, 1); // Spread trigger
+    clock.destroy_for_testing();
+}
+
+#[test]
+fun test_no_crisis_normal_market() {
+    let mut ctx = tx_context::dummy();
+    let clock = clock::create_for_testing(&mut ctx);
+    // Normal conditions: 5% vol, 90% liquidity, 50 bps spread
+    let result = detect_crisis(1000, 1050, 10000, 9000, 50, &clock);
+    assert!(result.is_crisis == false, 0);
+    assert!(result.trigger_type == 0, 1);
+    clock.destroy_for_testing();
 }
