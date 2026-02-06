@@ -140,7 +140,7 @@ export default function Home() {
           LEX JUSTICIA — Myersonian Mechanism Design for Fair DeFi Market-Making
           <br />
           <span className="opacity-60">
-            Built with Sui Move • Deployed on Testnet • Powered by Theorem 3.2
+            Built with Sui Move • Deployed on Testnet • <a href="https://arxiv.org/abs/your-paper-id" target="_blank" rel="noopener noreferrer" className="underline hover:opacity-80">Research Paper</a>
           </span>
         </footer>
       </div>
